@@ -1,294 +1,214 @@
-#include <LPC214x.H>  /* LPC21xx definitions         */
-#include"uart_interuppt.h"
+//************************************************************
+// File    : uart_interrupt.c
+// Purpose : Implements UART0 driver with interrupt support
+//           for RFID data reception and serial communication.
+//************************************************************
+
+#include <LPC214x.H>      /* LPC214x Register Definitions */
+#include "uart_interuppt.h"
 #include <string.h>
-#include<time.h>
-#include"lcd.h"
+#include <time.h>
+#include "lcd.h"
 #include "rtc.h"
-#define UART_INT_ENABLE 1
- 
-char buff[200],dummy;
 
-unsigned char i=0,ch,r_flag;
+#define UART_INT_ENABLE 1     /* Enable UART interrupt */
 
+/* UART receive buffer */
+char buff[200], dummy;
 
+/* UART status variables */
+unsigned char i = 0, ch, r_flag;
+
+/*-----------------------------------------------------------
+ * Function : UART0_isr()
+ * Purpose  : UART0 Interrupt Service Routine.
+ *            Receives RFID data and stores it in the buffer.
+ *----------------------------------------------------------*/
 void UART0_isr(void) __irq
-
 {
+    /* Check whether receive interrupt occurred */
+    if(U0IIR & 0x04)
+    {
+        /* Read received character */
+        ch = U0RBR;
 
-  if((U0IIR & 0x04)) //check if receive interrupt
+        /* Ignore carriage return */
+        if(ch != 0x0D)
+        {
+            buff[i++] = ch;
+        }
+        else if(i > 7)
+        {
+            /* Terminate received RFID string */
+            buff[8] = '\0';
 
-  {
+            /* Reset buffer index */
+            i = 0;
 
-		ch = U0RBR;
-		if(ch!=0x0d)
-		{	/* Read to Clear Receive Interrupt */
+            /* Indicate RFID data received */
+            r_flag = 1;
+        }
+    }
+    else
+    {
+        /* Clear transmit interrupt */
+        dummy = U0IIR;
+    }
 
-			buff[i++] = ch; 
-
-		/*if(i>=8)
-
-		{
-
-			tag[8] = '\0';
-
-			i=0;
-
-			//r_flag = 1;
-
-		} */
-		}
-		else if(i>7)
-		{
-		buff[8] = '\0';
-
-			i=0;
-		r_flag= 1;
-	
-		}
-
-  }
-
-  else
-
-  {
-
-      dummy=U0IIR; //Read to Clear transmit interrupt
-
-  
-
-  }
-
-   VICVectAddr = 0; /* dummy write */
-
+    /* Notify VIC that interrupt servicing is complete */
+    VICVectAddr = 0;
 }
 
+/*-----------------------------------------------------------
+ * Function : InitUART0()
+ * Purpose  : Initializes UART0 and enables interrupt mode.
+ *----------------------------------------------------------*/
+void InitUART0(void)
+{
+    /* Configure UART0 TXD0 and RXD0 pins */
+    PINSEL0 = 0x00000005;
 
-void InitUART0 (void) /* Initialize Serial Interface       */ 
+    /* Configure UART: 8-bit, No parity, 1 stop bit */
+    U0LCR = 0x83;
 
-{  
+    /* Set baud rate to 9600 bps */
+    U0DLL = 97;
 
-            		
+    /* Disable DLAB */
+    U0LCR = 0x03;
 
-  PINSEL0 = 0x00000005; /* Enable RxD0 and TxD0              */
+#if UART_INT_ENABLE > 0
 
-  U0LCR = 0x83;         /* 8 bits, no Parity, 1 Stop bit     */
+    /* Configure UART0 interrupt as IRQ */
+    VICIntSelect = 0x00000000;
 
-  U0DLL = 97;           /* 9600 Baud Rate @ CCLK/4 VPB Clock  */
+    /* Register UART0 ISR */
+    VICVectAddr0 = (unsigned)UART0_isr;
 
-  U0LCR = 0x03;         /* DLAB = 0  */
+    /* Assign UART0 interrupt to vector slot 0 */
+    VICVectCntl0 = 0x20 | 6;
 
-  
+    /* Enable UART0 interrupt */
+    VICIntEnable = 1 << 6;
 
-  #if UART_INT_ENABLE > 0
+    /* Enable Receive and THRE interrupts */
+    U0IER = 0x03;
 
-
-  VICIntSelect = 0x00000000; // IRQ
-
-  VICVectAddr0 = (unsigned)UART0_isr;
-
-  VICVectCntl0 = 0x20 | 6; /* UART0 Interrupt */
-
-  VICIntEnable = 1 << 6; 
-
-  
-
-  
-
-  /* Enable UART0 Interrupt */
-
- 
-
- // U0IIR = 0xc0;
-
- // U0FCR = 0xc7;
-
-  U0IER = 0x03;       /* Enable UART0 RX and THRE Interrupts */   
-
-             
-
-  #endif
-
-						
-
+#endif
 }
 
+/*-----------------------------------------------------------
+ * Function : UART0_Tx()
+ * Purpose  : Transmits a single character.
+ *----------------------------------------------------------*/
+void UART0_Tx(char ch)
+{
+    /* Wait until transmitter is ready */
+    while(!(U0LSR & 0x20));
 
-void UART0_Tx(char ch)  /* Write character to Serial Port    */  
-
-{ 
-
-  while (!(U0LSR & 0x20));
-
-  U0THR = ch;                
-
+    /* Send character */
+    U0THR = ch;
 }
 
+/*-----------------------------------------------------------
+ * Function : UART0_Rx()
+ * Purpose  : Receives a single character.
+ *----------------------------------------------------------*/
+char UART0_Rx(void)
+{
+    /* Wait until data is available */
+    while(!(U0LSR & 0x01));
 
-char UART0_Rx(void)    /* Read character from Serial Port   */
-
-{                     
-
-  while (!(U0LSR & 0x01));
-
-  return (U0RBR);
-
+    return U0RBR;
 }
 
-
-
-
-
+/*-----------------------------------------------------------
+ * Function : UART0_Str()
+ * Purpose  : Transmits a null-terminated string.
+ *----------------------------------------------------------*/
 void UART0_Str(char *s)
-
 {
-
-   while(*s)
-
-       UART0_Tx(*s++);
-
+    while(*s)
+        UART0_Tx(*s++);
 }
 
-
+/*-----------------------------------------------------------
+ * Function : UART0_Int()
+ * Purpose  : Transmits an unsigned integer.
+ *----------------------------------------------------------*/
 void UART0_Int(unsigned int n)
-
 {
+    unsigned char a[10] = {0};
+    int i = 0;
 
-  unsigned char a[10]={0,0,0,0,0,0,0,0,0,0};
+    if(n == 0)
+    {
+        UART0_Tx('0');
+        return;
+    }
 
-  int i=0;
+    /* Convert integer into ASCII digits */
+    while(n > 0)
+    {
+        a[i++] = (n % 10) + '0';
+        n /= 10;
+    }
 
-  if(n==0)
-
-  {
-
-    UART0_Tx('0');
-
-	return;
-
-  }
-
-  else
-
-  {
-
-     while(n>0)
-
-	 {
-
-	   a[i++]=(n%10)+48;
-
-	   n=n/10;
-
-	 }
-
-	 --i;
-
-	 for(;i>=0;i--)
-
-	 {
-
-	   UART0_Tx(a[i]);
-
-	 }
-
-   }
-
+    /* Transmit digits */
+    while(--i >= 0)
+    {
+        UART0_Tx(a[i]);
+    }
 }
 
-
+/*-----------------------------------------------------------
+ * Function : UART0_Float()
+ * Purpose  : Transmits a floating-point number.
+ *----------------------------------------------------------*/
 void UART0_Float(float f)
-
 {
+    int x;
+    float temp;
 
-  int x;
+    /* Transmit integer part */
+    x = f;
+    UART0_Int(x);
 
-  float temp;
+    UART0_Tx('.');
 
-  x=f;
+    /* Transmit fractional part */
+    temp = (f - x) * 100;
+    x = temp;
 
-  UART0_Int(x);
-
-  UART0_Tx('.');
-
-  temp=(f-x)*100;
-
-  x=temp;
-
-  UART0_Int(x);
-
+    UART0_Int(x);
 }
 
+/*-----------------------------------------------------------
+ * Function : DelayS()
+ * Purpose  : Generates an approximate delay in seconds.
+ *----------------------------------------------------------*/
+void DelayS(unsigned int dly)
+{
+    unsigned int i;
 
-void  DelayS(unsigned int  dly)
-
-{  unsigned int  i;
-
-
-   for(; dly>0; dly--) 
-
-      for(i=1200000; i>0; i--);
-
+    while(dly--)
+    {
+        for(i = 1200000; i > 0; i--);
+    }
 }
 
 #include <LPC214X.H>
 
-/*int main()
+/*
+-------------------------------------------------------------
+ Test Code (Commented)
+-------------------------------------------------------------
+Purpose:
+- Reads RFID tag through UART.
+- Displays RFID tag on LCD.
+- Generates OTP using RTC time.
+- Grants or denies access based on RFID validation.
 
-{
-	s32 hour,min,sec;
-	char otp[5],tag1[10]="12527137";
-   int h1,h2,m1,m2,s1,s2; 
-	 InitUART0();
-	 //InitUART1();
-  InitLCD();
-  StrLCD("scan Card");
-
-					
-  while(1)
-
-  {
-
-		i=0;r_flag=0;
-	  UART0_Str("RFID\r\n");
-    while(r_flag==0);
-	UART0_Str("");
-	 CmdLCD(0x01);
-	 StrLCD("RFID TAG:");
-	 CmdLCD(0xc0);
-	 StrLCD(buff);
-	 delay_ms(1000);
-	CmdLCD(0x01);
-	GetRTCTimeInfo(&hour,&min,&sec);
-	SetRTCTimeInfo(7,34,55); 
-    h1=hour/10;
-    h2=hour%10;
-    m1=min/10;
-    m2=min%10;
-    s1=sec/10;
-    s2=sec%10;
-	otp[0]=(((h1+s2))*3%10)+'0';
-	otp[1]=(((m2+h2*s1)*7)%10)+'0';
-	otp[2]=(((h1*m2+s2)*11)%10)+'0';
-	otp[3]=(((h2+m2+s1+s2)*13)%10)+'0';
-  	otp[4]='\0'; 
-   if(strcmp(buff,tag1)==0)
-   {
-      CmdLCD(0x80);
-      StrLCD(otp);
-   	  CmdLCD(0xc0);
-	  StrLCD("Acesss Granted");
-	 
-   }
-   else 
-   {
-   	  
-	  CmdLCD(0xc0);
-	  StrLCD("Access Denied");
-   }
-	  r_flag=0;
-
-  }
-
-}  */
-
-
+Retained for testing and debugging purposes.
+-------------------------------------------------------------
+*/
