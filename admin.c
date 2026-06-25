@@ -4,178 +4,204 @@
 #include "kpm.h"
 #include "rtc.h"
 #include "delay.h"
+
+/*------------------------------------------------------------
+ * Function : rtc_edit()
+ * Purpose  : Displays the RTC edit menu and allows the user
+ *            to modify the current date and time parameters.
+ *-----------------------------------------------------------*/
 void rtc_edit()
 {
     u8 key1;
     u8 hour;
-	  u8 minute;
-	  u8 second;
-	  u8 date;
-	  u8 month;
-	  u32 year;
-	   u8 week;
- 
-  while(1)
+    u8 minute;
+    u8 second;
+    u8 date;
+    u8 month;
+    u32 year;
+    u8 week;
+
+    while(1)
     {
+        /* Display RTC editing options */
         CmdLCD(CLEAR_LCD);
         CmdLCD(GOTO_LINE1_POS0);
         StrLCD("1.H 2.MI 3.S 4.D");
         CmdLCD(GOTO_LINE2_POS0);
         StrLCD("5.M 6.YR 7.W 8.E");
- 
+
+        /* Read user selection from keypad */
         key1 = KeyScan();
-            switch(key1)
-            {
-                case 1:   // set hour
-                    CmdLCD(CLEAR_LCD);
-                    StrLCD("Enter Hour(0-23)");
-                    hour = ReadNumber(23); 
-					CharLCD(hour);  
-					if(hour>=0 && hour<23)      // display hour
-                    sethour(hour);      // update RTC
-                    break;
 
-                case 2:   // minute edit placeholder
-                    CmdLCD(CLEAR_LCD);
-                    StrLCD("MIN EDIT (0-59)");
-								    minute = ReadNumber(59);
-                     // display hour
-                    setminute(minute); 
-                    break;
-
-                case 3:   // second edit placeholder
-                    CmdLCD(CLEAR_LCD);
-                    StrLCD("SEC EDIT(0-59)");
-								    second= ReadNumber(59);
-								    setsecond(second);
-                    delay_ms(1000);
-                    break;
-								case 4:   // date edit placeholder
-                    CmdLCD(CLEAR_LCD);
-                    StrLCD("DATE EDIT(0-31)");
-								    date = ReadNumber(31);
-								    setdate(date);
-                    delay_ms(1000);
-                    break;
-								case 5:   // second edit placeholder
-                    CmdLCD(CLEAR_LCD);
-                    StrLCD("MONTH EDIT(0-12)");
-								    month = ReadNumber(12);
-								   setmonth(month);
-                    delay_ms(1000);
-                    break;
-								case 6:   // second edit placeholder
-                    CmdLCD(CLEAR_LCD);
-                    StrLCD("YEAR EDIT");
-					year = Read4Number(4095);
-						setyear(year);
-                    delay_ms(1000);
-                    break;
-								case 7:   // second edit placeholder
-                    CmdLCD(CLEAR_LCD);
-                    StrLCD("WEEK EDIT(0-6)");
-								    week = ReadNumber(6);
-								    SetRTCDay(week);
-                    delay_ms(1000);
-                    break;
-
-                case 8:  // exit RTC menu
-                    CmdLCD(CLEAR_LCD);
-								    return;
-								
-							default : StrLCD("INVALID CHOICE");								
-            }
-        }
-    }
-/*
-void event_edit()
-{
-	u8 key,event_no;
-
-    while(1)
-    {
-	    CmdLCD(CLEAR_LCD);
-        StrLCD("ENTER EVENT NO");
-        event_no = KeyScan();
-        CmdLCD(GOTO_LINE2_POS0);
-        CharLCD(event_no + '0');
-
-        if(event_no <= 9)
+        switch(key1)
         {
-            CmdLCD(CLEAR_LCD);
-            StrLCD("1.Act 2.DeAct");
-
-            key = KeyScan();
-
-            if(key == 1)
-            {
-                messageList[event_no].enabled = 1;
-                return;
-            }
-            else if(key == 2)
-            {
-                messageList[event_no].enabled = 0;
-                return;
-            }
-            else
-            {
+            /* Edit hour (24-hour format) */
+            case 1:
                 CmdLCD(CLEAR_LCD);
-                StrLCD("INVALID");
+                StrLCD("Enter Hour(0-23)");
+
+                /* Read hour value */
+                hour = ReadNumber(23);
+
+                /* Update RTC if the value is valid */
+                if(hour >= 0 && hour <= 23)
+                    sethour(hour);
+
                 delay_ms(1000);
+                break;
+
+            /* Edit minute */
+            case 2:
+                CmdLCD(CLEAR_LCD);
+                StrLCD("MIN EDIT(0-59)");
+
+                /* Read minute value */
+                minute = ReadNumber(59);
+
+                /* Update RTC minute */
+                setminute(minute);
+
+                delay_ms(1000);
+                break;
+
+            /* Edit second */
+            case 3:
+                CmdLCD(CLEAR_LCD);
+                StrLCD("SEC EDIT(0-59)");
+
+                /* Read second value */
+                second = ReadNumber(59);
+
+                /* Update RTC second */
+                setsecond(second);
+
+                delay_ms(1000);
+                break;
+
+            /* Edit date */
+            case 4:
+                CmdLCD(CLEAR_LCD);
+                StrLCD("DATE EDIT(1-31)");
+
+                /* Read date value */
+                date = ReadNumber(31);
+
+                /* Update RTC date */
+                setdate(date);
+
+                delay_ms(1000);
+                break;
+
+            /* Edit month */
+            case 5:
+                CmdLCD(CLEAR_LCD);
+                StrLCD("MONTH EDIT(1-12)");
+
+                /* Read month value */
+                month = ReadNumber(12);
+
+                /* Update RTC month */
+                setmonth(month);
+
+                delay_ms(1000);
+                break;
+
+            /* Edit year */
+            case 6:
+                CmdLCD(CLEAR_LCD);
+                StrLCD("YEAR EDIT");
+
+                /* Read four-digit year */
+                year = Read4Number(4095);
+
+                /* Update RTC year */
+                setyear(year);
+
+                delay_ms(1000);
+                break;
+
+            /* Edit day of the week */
+            case 7:
+                CmdLCD(CLEAR_LCD);
+                StrLCD("WEEK EDIT(0-6)");
+
+                /* Read weekday value */
+                week = ReadNumber(6);
+
+                /* Update RTC weekday */
+                SetRTCDay(week);
+
+                delay_ms(1000);
+                break;
+
+            /* Exit RTC edit menu */
+            case 8:
+                CmdLCD(CLEAR_LCD);
                 return;
-            }
-        }
-        else
-        {
-            CmdLCD(CLEAR_LCD);
-            StrLCD("INVALID");
-            delay_ms(1000);
-            return;
+
+            /* Handle invalid keypad input */
+            default:
+                CmdLCD(CLEAR_LCD);
+                StrLCD("INVALID CHOICE");
+                delay_ms(1000);
         }
     }
-} */
+}
+
+
+/*------------------------------------------------------------
+ * Function : adminmode()
+ * Purpose  : Displays the administrator menu and provides
+ *            access to RTC configuration settings.
+ *-----------------------------------------------------------*/
 void adminmode()
 {
     u8 key;
 
     while(1)
     {
- 
+        /* Display administrator menu */
         CmdLCD(CLEAR_LCD);
         CmdLCD(GOTO_LINE1_POS0);
         StrLCD("1.RTC 2.EXIT");
-       // CmdLCD(GOTO_LINE2_POS0);
-        //StrLCD("3.EXIT");
 
-        delay_ms(100);  
+        delay_ms(100);
 
+        /* Read administrator choice */
         key = KeyScan();
 
-              
-            switch(key)
-            {
-                case 1:
-                    CmdLCD(CLEAR_LCD);
-                    StrLCD("RTC EDIT");
-                    delay_ms(200);
-                    rtc_edit();
-                    break;
-                /*case 2:
-                    CmdLCD(CLEAR_LCD);
-                    StrLCD("EVENT EDIT");
-                    delay_ms(200);
-                    event_edit();
-                    break;
-				  */
-                case 2:
-                    CmdLCD(CLEAR_LCD);
-                    delay_ms(200);
-                    return;
+        switch(key)
+        {
+            /* Open RTC editing menu */
+            case 1:
+                CmdLCD(CLEAR_LCD);
+                StrLCD("RTC EDIT");
+                delay_ms(200);
 
-            }
+                rtc_edit();
+                break;
+
+            /*
+            // Enable when Event Edit is implemented
+            case 2:
+                CmdLCD(CLEAR_LCD);
+                StrLCD("EVENT EDIT");
+                delay_ms(200);
+                event_edit();
+                break;
+            */
+
+            /* Exit administrator mode */
+            case 2:
+                CmdLCD(CLEAR_LCD);
+                delay_ms(200);
+                return;
+
+            /* Display error for invalid selection */
+            default:
+                CmdLCD(CLEAR_LCD);
+                StrLCD("INVALID CHOICE");
+                delay_ms(1000);
         }
     }
-
-
-
-
+}
