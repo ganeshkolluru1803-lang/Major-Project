@@ -1,332 +1,280 @@
-//lcd.c
+//************************************************************
+// File    : lcd.c
+// Purpose : Provides LCD driver functions for initialization,
+//           command execution, data display, and number
+//           conversion on a 16x2 LCD.
+//************************************************************
 
 #include "DEFINES.H"
-
 #include "types.h"
-
 #include <lpc21xx.h>
-
 #include "lcd_defines.h"
-
 #include "delay.h"
 
+/*-----------------------------------------------------------
+ * Function : WriteLCD()
+ * Purpose  : Writes a byte to the LCD.
+ *----------------------------------------------------------*/
 void WriteLCD(u8 data)
-
 {
+    /* Select write operation */
+    SCLRBIT(IOCLR0,RW);
 
-	SCLRBIT(IOCLR0,RW);// r/w=0(to perform write operation)
+    /* Place data on LCD data pins */
+    WRITEBYTE(IOPIN0,LCD_DATA,data);
 
-	WRITEBYTE(IOPIN0,LCD_DATA,data);
+    /* Generate enable pulse */
+    SSETBIT(IOSET0,EN);
+    delay_us(1);
+    SCLRBIT(IOCLR0,EN);
 
-	SSETBIT(IOSET0,EN);// en=1
-
-	delay_us(1);
-
-	SCLRBIT(IOCLR0,EN);// en=0
-
-	delay_ms(2); // internal process
-
+    /* Wait for LCD processing */
+    delay_ms(2);
 }
 
+/*-----------------------------------------------------------
+ * Function : CmdLCD()
+ * Purpose  : Sends a command to the LCD.
+ *----------------------------------------------------------*/
 void CmdLCD(u8 cmd)
-
 {
+    /* Select command register */
+    SCLRBIT(IOCLR0,RS);
 
-	SCLRBIT(IOCLR0,RS);//rs=0(command reg select)
-
-	WriteLCD(cmd);// write cmd onto the data pins
-
+    /* Write command */
+    WriteLCD(cmd);
 }
 
+/*-----------------------------------------------------------
+ * Function : CharLCD()
+ * Purpose  : Displays a single character on the LCD.
+ *----------------------------------------------------------*/
 void CharLCD(u8 ascii)
-
 {
+    /* Select data register */
+    SSETBIT(IOSET0,RS);
 
-	SSETBIT(IOSET0,RS);//rs=1 (data reg select)
-
-	WriteLCD(ascii);// write data onto the data pins
-
+    /* Write character */
+    WriteLCD(ascii);
 }
 
-
+/*-----------------------------------------------------------
+ * Function : InitLCD()
+ * Purpose  : Initializes the LCD in 8-bit, 2-line mode.
+ *----------------------------------------------------------*/
 void InitLCD(void)
-
 {
+    /* Configure LCD data pins as outputs */
+    WRITEBYTE(IODIR0,LCD_DATA,0xFF);
 
-	//p0.8 t0 p0.15 cfg as outputs
+    /* Configure LCD control pins as outputs */
+    SETBIT(IODIR0,RS);
+    SETBIT(IODIR0,RW);
+    SETBIT(IODIR0,EN);
 
-	WRITEBYTE(IODIR0,LCD_DATA,0xFF);
+    /* LCD initialization sequence */
+    delay_ms(15);
 
-	//p0.16 t0 p0.18 cfg as outputs
+    CmdLCD(MODE_8BIT_1LINE);
+    delay_ms(5);
 
-	SETBIT(IODIR0,RS);
+    CmdLCD(MODE_8BIT_1LINE);
+    delay_us(100);
 
-	SETBIT(IODIR0,RW);
+    CmdLCD(MODE_8BIT_1LINE);
 
-	SETBIT(IODIR0,EN);
-
-	
-
-	delay_ms(15);
-
-	CmdLCD(MODE_8BIT_1LINE);
-
-	delay_ms(5);
-
-	CmdLCD(MODE_8BIT_1LINE);
-
-	delay_us(100);
-
-	CmdLCD(MODE_8BIT_1LINE);
-
-	
-
-	CmdLCD(MODE_8BIT_2LINE);
-
-	CmdLCD(DISP_ON_CUR_OFF);
-
-	CmdLCD(CLEAR_LCD );
-
-	CmdLCD(SHIFT_CUR_RIGHT );
-
-}
- 
-
-void StrLCD(u8* str)
-
-{
-
-	while(*str)
-
-	{
-
-		CharLCD(*str++);
-
-	}
-
+    /* Configure display settings */
+    CmdLCD(MODE_8BIT_2LINE);
+    CmdLCD(DISP_ON_CUR_OFF);
+    CmdLCD(CLEAR_LCD);
+    CmdLCD(SHIFT_CUR_RIGHT);
 }
 
+/*-----------------------------------------------------------
+ * Function : StrLCD()
+ * Purpose  : Displays a string on the LCD.
+ *----------------------------------------------------------*/
+void StrLCD(u8 *str)
+{
+    while(*str)
+    {
+        CharLCD(*str++);
+    }
+}
+
+/*-----------------------------------------------------------
+ * Function : U32LCD()
+ * Purpose  : Displays an unsigned 32-bit integer.
+ *----------------------------------------------------------*/
 void U32LCD(u32 n)
-
 {
+    u8 a[10];
+    s32 i = 0;
 
-	u8 a[10];
+    if(n == 0)
+    {
+        CharLCD('0');
+    }
+    else
+    {
+        /* Convert number into ASCII digits */
+        while(n)
+        {
+            a[i++] = (n % 10) + '0';
+            n /= 10;
+        }
 
-	s32 i=0;
-
-	if(n==0)
-
-		{
-
-			CharLCD('0');
-
-			
-
-		}
-
-	else{
-
-				while(n)
-
-				{
-
-					a[i++]=(n%10)+'0';
-
-					n/=10;
-
-				}
-
-				for(--i; i>=0; i--)
-
-				{
-
-					CharLCD(a[i]);
-
-				}
-
-			}
-
+        /* Display digits in correct order */
+        for(--i; i >= 0; i--)
+        {
+            CharLCD(a[i]);
+        }
+    }
 }
 
+/*-----------------------------------------------------------
+ * Function : S32LCD()
+ * Purpose  : Displays a signed 32-bit integer.
+ *----------------------------------------------------------*/
 void S32LCD(s32 n)
-
 {
-
-	if(n<0)
-
-	{
-
-		n=-n;
-
-		CharLCD('-');
-
-		U32LCD(n);
-
-	}
-
-	
-
+    /* Display negative sign if required */
+    if(n < 0)
+    {
+        n = -n;
+        CharLCD('-');
+        U32LCD(n);
+    }
 }
 
+/*-----------------------------------------------------------
+ * Function : BinLCD()
+ * Purpose  : Displays a number in binary format.
+ *----------------------------------------------------------*/
 void BinLCD(u32 n, u8 nbd)
-
 {
+    s32 i;
 
-	s32  i;
-
-	for(i=(nbd-1); i>=0; i--)
-
-	{
-
-		CharLCD(((n>>i)&1)+48);
-
-	}
-
+    for(i = nbd - 1; i >= 0; i--)
+    {
+        CharLCD(((n >> i) & 1) + '0');
+    }
 }
 
-void BuildCGRAM(u8* p, u8 nBytes)
-
+/*-----------------------------------------------------------
+ * Function : BuildCGRAM()
+ * Purpose  : Loads custom characters into LCD CGRAM.
+ *----------------------------------------------------------*/
+void BuildCGRAM(u8 *p, u8 nBytes)
 {
+    s32 i;
 
-	s32 i;
+    /* Select CGRAM */
+    CmdLCD(GOTO_CGRAM);
 
-	//select cgram
+    /* Write custom character data */
+    for(i = 0; i < nBytes; i++)
+    {
+        CharLCD(p[i]);
+    }
 
-	CmdLCD(GOTO_CGRAM);
-
-	for(i=0; i<nBytes; i++)
-
-	{
-
-		//write byte by byte via data reg
-
-		CharLCD(p[i]);
-
-	}
-
-	//go to DDRAM
-
-	CmdLCD(GOTO_LINE2_POS0);
-
+    /* Return to DDRAM */
+    CmdLCD(GOTO_LINE2_POS0);
 }
 
+/*-----------------------------------------------------------
+ * Function : f32LCD()
+ * Purpose  : Displays a floating-point number.
+ *----------------------------------------------------------*/
 void f32LCD(f32 fnum, u8 ndp)
-
 {
+    u32 inum;
 
-	u32 inum;
+    /* Handle negative numbers */
+    if(fnum < 0.0)
+    {
+        CharLCD('-');
+        fnum = -fnum;
+    }
 
-	if(fnum<0.0)
+    /* Display integer part */
+    inum = fnum;
+    U32LCD(inum);
 
-	{
+    /* Display decimal point */
+    CharLCD('.');
 
-		CharLCD('-');
+    /* Display fractional part */
+    while(ndp)
+    {
+        fnum = (fnum - inum) * 10;
+        inum = fnum;
 
-		fnum=-fnum;
+        CharLCD(inum + '0');
 
-	}
-
-	inum=fnum;
-
-	U32LCD(inum);
-
-	CharLCD('.');
-
-	while(ndp)
-
-	{
-
-		fnum=(fnum-inum)*10;
-
-		inum=fnum;
-
-		CharLCD(inum+48);
-
-		ndp--;
-
-	}
-
+        ndp--;
+    }
 }
 
-
+/*-----------------------------------------------------------
+ * Function : HexLCD()
+ * Purpose  : Displays a number in hexadecimal format.
+ *----------------------------------------------------------*/
 void HexLCD(u32 n)
-
 {
+    u8 a[8], rem;
+    s32 i = 0;
 
-	u8 a[8],rem;
+    if(n == 0)
+    {
+        CharLCD('0');
+    }
+    else
+    {
+        /* Convert decimal to hexadecimal */
+        while(n)
+        {
+            rem = n % 16;
+            (rem < 10) ? (rem += '0') : (rem += 55);
 
-	s32 i=0;
+            a[i++] = rem;
+            n /= 16;
+        }
 
-	if(n==0)
-
-	{
-
-		CharLCD('0');
-
-	}
-
-	else
-
-		while(n)
-
-		{
-
-			rem=n%16;
-
-			(rem<10 )? (rem+=48 ):(rem+=55);
-
-			a[i++]=rem;
-
-			n/=16;
-
-		}
-
-		for(--i; i>=0; i--)
-
-		{
-
-			CharLCD(a[i]);
-
-		}
-
+        /* Display hexadecimal digits */
+        for(--i; i >= 0; i--)
+        {
+            CharLCD(a[i]);
+        }
+    }
 }
 
+/*-----------------------------------------------------------
+ * Function : OctLCD()
+ * Purpose  : Displays a number in octal format.
+ *----------------------------------------------------------*/
 void OctLCD(u32 n)
-
 {
+    s32 i = 0;
+    u8 a[12];
 
-	s32 i=0;
+    if(n == 0)
+    {
+        CharLCD('0');
+    }
+    else
+    {
+        /* Convert decimal to octal */
+        while(n)
+        {
+            a[i++] = (n % 8) + '0';
+            n /= 8;
+        }
 
-	u8 a[12];
-
-	if(n==0)
-
-	{
-
-		CharLCD('0');
-
-	}
-
-	else
-
-		while(n)
-
-		{
-
-			a[i++]=(n%8)+48;
-
-			n/=8;
-
-		
-
-		}
-
-		for(--i; i>=0; i--)
-
-		{
-
-			CharLCD(a[i]);
-
-		}
-
+        /* Display octal digits */
+        for(--i; i >= 0; i--)
+        {
+            CharLCD(a[i]);
+        }
+    }
 }
