@@ -1,284 +1,205 @@
-#include <LPC214x.H>  /* LPC21xx definitions         */
-#include"uart_interuppt.h"
+//************************************************************
+// File    : uart1_interrupt.c
+// Purpose : Implements UART1 driver with interrupt support
+//           for RFID reader communication.
+//************************************************************
+
+#include <LPC214x.H>      /* LPC214x Register Definitions */
+#include "uart_interuppt.h"
 #include <string.h>
-#include<time.h>
-#include"lcd.h"
+#include <time.h>
+#include "lcd.h"
 #include "rtc.h"
-#define UART_INT_ENABLE 1
- 
-char buff1[200],dummy1;
 
-unsigned char i1=0,ch1,r_flag1;
-void InitUART1 (void);
+#define UART_INT_ENABLE 1      /* Enable UART1 interrupts */
 
+/* UART1 receive buffer */
+char buff1[200], dummy1;
+
+/* UART1 status variables */
+unsigned char i1 = 0, ch1, r_flag1;
+
+/* UART1 initialization function */
+void InitUART1(void);
+
+/*-----------------------------------------------------------
+ * Function : UART1_isr()
+ * Purpose  : UART1 Interrupt Service Routine.
+ *            Receives RFID data frame and stores the tag ID.
+ *----------------------------------------------------------*/
 void UART1_isr(void) __irq
-
 {
+    /* Check for receive interrupt */
+    if(U1IIR & 0x04)
+    {
+        /* Read received byte */
+        ch1 = U1RBR;
 
-  if((U1IIR & 0x04)) //check if receive interrupt
+        /* Detect start of RFID frame */
+        if(ch1 == 0x02)
+        {
+            r_flag1 = 1;
+        }
 
-  {
+        /* Store RFID tag characters */
+        else if((ch1 != 0x03) && (r_flag1 == 1))
+        {
+            buff1[i1++] = ch1;
+        }
 
-		ch1= U1RBR;
-		if(ch1==0x02)
-		{	/* Read to Clear Receive Interrupt */
+        /* Detect end of RFID frame */
+        else
+        {
+            buff1[i1] = '\0';
+            i1 = 0;
+            r_flag1 = 2;
+        }
+    }
+    else
+    {
+        /* Clear transmit interrupt */
+        dummy1 = U1IIR;
+    }
 
-			//buff1[i1++] = ch1; 
-			r_flag1=1;
-		/*if(i>=8)
-
-		{
-
-			tag[8] = '\0';
-
-			i=0;
-
-			//r_flag = 1;
-
-		} */
-		}
-		else if((ch1!=0x03)&&(r_flag1==1))
-		{
-		buff1[i1++]=ch1;
-		}
-		else 
-		{
-		 buff1[i1]='\0';
-		 i1=0;
-		 r_flag1=2;
-		}
-
-  }
-
-  else
-
-  {
-
-      dummy1=U1IIR; //Read to Clear transmit interrupt
-
-  
-
-  }
-
-   VICVectAddr = 0; /* dummy write */
-
+    /* Notify VIC that interrupt processing is complete */
+    VICVectAddr = 0;
 }
 
+/*-----------------------------------------------------------
+ * Function : InitUART1()
+ * Purpose  : Initializes UART1 for 9600 baud communication
+ *            and enables UART1 interrupts.
+ *----------------------------------------------------------*/
+void InitUART1(void)
+{
+    /* Configure UART1 TXD1 and RXD1 pins */
+    PINSEL0 |= 0x00050000;
 
-void InitUART1 (void) /* Initialize Serial Interface       */ 
+    /* Configure UART: 8-bit, No parity, 1 stop bit */
+    U1LCR = 0x83;
 
-{  
+    /* Set baud rate to 9600 bps */
+    U1DLL = 97;
 
-            		
+    /* Disable DLAB */
+    U1LCR = 0x03;
 
-  PINSEL0 |= 0x00050000; /* Enable RxD0 and TxD0              */
+#if UART_INT_ENABLE > 0
 
-  U1LCR = 0x83;         /* 8 bits, no Parity, 1 Stop bit     */
+    /* Configure UART1 interrupt as IRQ */
+    VICIntSelect = 0x00000000;
 
-  U1DLL = 97;           /* 9600 Baud Rate @ CCLK/4 VPB Clock  */
+    /* Register UART1 ISR */
+    VICVectAddr1 = (unsigned)UART1_isr;
 
-  U1LCR = 0x03;         /* DLAB = 0  */
+    /* Assign UART1 interrupt to vector slot 1 */
+    VICVectCntl1 = 0x20 | 7;
 
-  
+    /* Enable UART1 interrupt */
+    VICIntEnable |= (1 << 7);
 
-  #if UART_INT_ENABLE > 0
+    /* Enable Receive and THRE interrupts */
+    U1IER = 0x03;
 
-
-  VICIntSelect = 0x00000000; // IRQ
-
-  VICVectAddr1 = (unsigned)UART1_isr;
-
-  VICVectCntl1 = 0x20 | 7; /* UART0 Interrupt */
-
-  VICIntEnable |= 1 << 7; 
-
-  
-
-  
-
-  /* Enable UART0 Interrupt */
-
- 
-
- // U0IIR = 0xc0;
-
- // U0FCR = 0xc7;
-
-  U1IER = 0x03;       /* Enable UART0 RX and THRE Interrupts */   
-
-             
-
-  #endif
-
-						
-
+#endif
 }
 
+/*-----------------------------------------------------------
+ * Function : UART1_Tx()
+ * Purpose  : Transmits a single character through UART1.
+ *----------------------------------------------------------*/
+void UART1_Tx(char ch)
+{
+    /* Wait until transmitter is ready */
+    while(!(U1LSR & 0x20));
 
-void UART1_Tx(char ch)  /* Write character to Serial Port    */  
-
-{ 
-
-  while (!(U1LSR & 0x20));
-
-  U1THR = ch;                
-
+    U1THR = ch;
 }
 
+/*-----------------------------------------------------------
+ * Function : UART1_Rx()
+ * Purpose  : Receives a single character through UART1.
+ *----------------------------------------------------------*/
+char UART1_Rx(void)
+{
+    /* Wait until data is available */
+    while(!(U1LSR & 0x01));
 
-char UART1_Rx(void)    /* Read character from Serial Port   */
-
-{                     
-
-  while (!(U1LSR & 0x01));
-
-  return (U1RBR);
-
+    return U1RBR;
 }
 
-
-
-
-
+/*-----------------------------------------------------------
+ * Function : UART1_Str()
+ * Purpose  : Transmits a string through UART1.
+ *----------------------------------------------------------*/
 void UART1_Str(char *s)
-
 {
-
-   while(*s)
-
-       UART1_Tx(*s++);
-
+    while(*s)
+    {
+        UART1_Tx(*s++);
+    }
 }
 
-
+/*-----------------------------------------------------------
+ * Function : UART1_Int()
+ * Purpose  : Transmits an unsigned integer.
+ *----------------------------------------------------------*/
 void UART1_Int(unsigned int n)
-
 {
+    unsigned char a[10] = {0};
+    int i = 0;
 
-  unsigned char a[10]={0,0,0,0,0,0,0,0,0,0};
+    if(n == 0)
+    {
+        UART0_Tx('0');
+        return;
+    }
 
-  int i=0;
+    /* Convert integer into ASCII digits */
+    while(n > 0)
+    {
+        a[i++] = (n % 10) + '0';
+        n /= 10;
+    }
 
-  if(n==0)
-
-  {
-
-    UART0_Tx('0');
-
-	return;
-
-  }
-
-  else
-
-  {
-
-     while(n>0)
-
-	 {
-
-	   a[i++]=(n%10)+48;
-
-	   n=n/10;
-
-	 }
-
-	 --i;
-
-	 for(;i>=0;i--)
-
-	 {
-
-	   UART1_Tx(a[i]);
-
-	 }
-
-   }
-
+    /* Transmit digits */
+    while(--i >= 0)
+    {
+        UART1_Tx(a[i]);
+    }
 }
 
-
+/*-----------------------------------------------------------
+ * Function : UART1_Float()
+ * Purpose  : Transmits a floating-point number.
+ *----------------------------------------------------------*/
 void UART1_Float(float f)
-
 {
+    int x;
+    float temp;
 
-  int x;
+    /* Transmit integer part */
+    x = f;
+    UART1_Int(x);
 
-  float temp;
+    UART1_Tx('.');
 
-  x=f;
+    /* Transmit fractional part */
+    temp = (f - x) * 100;
+    x = temp;
 
-  UART1_Int(x);
-
-  UART1_Tx('.');
-
-  temp=(f-x)*100;
-
-  x=temp;
-
-  UART1_Int(x);
-
+    UART1_Int(x);
 }
 
+/*
+-------------------------------------------------------------
+ Test Code (Commented)
+-------------------------------------------------------------
+Purpose:
+- Used during UART1/RFID module testing.
+- Displays the received RFID tag.
+- Performs basic access verification.
 
-
-/*int main()
-
-{
-	s32 hour,min,sec;
-	char otp[5],tag1[10]="12527137";
-   int h1,h2,m1,m2,s1,s2; 
-	 InitUART0();
-	 //InitUART1();
-  InitLCD();
-  StrLCD("scan Card");
-
-					
-  while(1)
-
-  {
-
-		i=0;r_flag=0;
-	  UART0_Str("RFID\r\n");
-    while(r_flag==0);
-	UART0_Str("");
-	 CmdLCD(0x01);
-	 StrLCD("RFID TAG:");
-	 CmdLCD(0xc0);
-	 StrLCD(buff);
-	 delay_ms(1000);
-	CmdLCD(0x01);
-	GetRTCTimeInfo(&hour,&min,&sec);
-	SetRTCTimeInfo(7,34,55); 
-    h1=hour/10;
-    h2=hour%10;
-    m1=min/10;
-    m2=min%10;
-    s1=sec/10;
-    s2=sec%10;
-	otp[0]=(((h1+s2))*3%10)+'0';
-	otp[1]=(((m2+h2*s1)*7)%10)+'0';
-	otp[2]=(((h1*m2+s2)*11)%10)+'0';
-	otp[3]=(((h2+m2+s1+s2)*13)%10)+'0';
-  	otp[4]='\0'; 
-   if(strcmp(buff,tag1)==0)
-   {
-      CmdLCD(0x80);
-      StrLCD(otp);
-   	  CmdLCD(0xc0);
-	  StrLCD("Acesss Granted");
-	 
-   }
-   else 
-   {
-   	  
-	  CmdLCD(0xc0);
-	  StrLCD("Access Denied");
-   }
-	  r_flag=0;
-
-  }
-
-}  */
-
-
+Retained for debugging and future reference.
+-------------------------------------------------------------
+*/
