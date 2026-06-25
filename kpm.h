@@ -1,0 +1,9 @@
+#include"types.h"
+
+void InitKPM(void);
+u8 colscan(void);
+u8 RowCheck(void);
+u8 ColCheck(void);
+u8 KeyScan(void);
+u32 ReadNum(void); 
+
